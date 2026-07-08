@@ -1,9 +1,9 @@
-------------------- MODULE Chronicle -------------------
+------------------- MODULE Lyra -------------------
 EXTENDS FiniteSets, Sequences, Integers, TLC, UnreliableNetwork
 
 (***************************************************************************
 
-CHRONICLE: DISTRIBUTED FLEXIBLE STREAM CONSENSUS PROTOCOL
+LYRA: DISTRIBUTED FLEXIBLE STREAM CONSENSUS PROTOCOL
 
 A simplified, term-based distributed consensus protocol for stream storage.
 
