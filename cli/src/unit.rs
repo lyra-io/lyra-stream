@@ -6,8 +6,8 @@ use std::path::Path;
 use tracing::info;
 use tracing_subscriber::EnvFilter;
 
-const DEFAULT_CONFIG_PATH: &str = "/etc/lyra/options/lyra.toml";
-const DEFAULT_PID_FILE: &str = "lyra-unit.pid";
+const DEFAULT_CONFIG_PATH: &str = "/etc/lyra/options/lyra-stream.toml";
+const DEFAULT_PID_FILE: &str = "lyra-stream.pid";
 
 /// Placeholder for the unit runtime.
 ///
@@ -58,7 +58,7 @@ pub async fn run(action: UnitAction) -> Result<(), Box<dyn std::error::Error>> {
             tracing_subscriber::fmt()
                 .with_env_filter(
                     EnvFilter::try_from_default_env()
-                        .unwrap_or_else(|_| EnvFilter::new(&options.liblyra.log_level)),
+                        .unwrap_or_else(|_| EnvFilter::new(&options.client.log_level)),
                 )
                 .with_ansi(std::io::stderr().is_terminal())
                 .with_target(false)
@@ -95,7 +95,7 @@ fn resolve_config_path(path: Option<&str>) -> Option<String> {
     if let Some(path) = path {
         return Some(path.to_string());
     }
-    if let Ok(path) = std::env::var("LYRA_UNIT_CONFIG")
+    if let Ok(path) = std::env::var("LYRA_STREAM_CONFIG")
         && !path.trim().is_empty()
     {
         return Some(path);

@@ -4,7 +4,7 @@ use crate::error_inner::InnerError;
 use backoff::future;
 use dashmap::DashMap;
 use futures_util::Stream;
-use meta::proto::pb_ext::{
+use lyra_stream_proto::pb_stream::{
     AppendEventsRequest, AppendEventsResponse, FenceRequest, FenceResponse, ReadEventsRequest,
     ReadEventsResponse, StatusCode, lyra_client::LyraClient,
 };

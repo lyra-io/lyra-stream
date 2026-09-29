@@ -1,6 +1,6 @@
 //! Errors produced by the stream storage write-ahead log.
 
-use meta::utils::promise::PromiseCanceled;
+use lyra_meta::utils::promise::PromiseCanceled;
 use std::io::Error;
 use std::path::{Path, PathBuf};
 use thiserror::Error;

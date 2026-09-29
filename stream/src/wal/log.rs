@@ -9,7 +9,7 @@ use super::{Log, Sequence};
 use crate::vfs::{StandardVfs, VfsI};
 use async_trait::async_trait;
 use bytes::Bytes;
-use meta::utils::promise::Promise;
+use lyra_meta::utils::promise::Promise;
 use std::sync::Arc;
 
 /// A buffered write-ahead log backed by Lyra's segment format.

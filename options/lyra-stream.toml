@@ -1,0 +1,19 @@
+# (*************************************************************************
+#  LYRA STREAM CONFIGURATION
+#
+#  [client] covers the client-facing unit settings, [stream] the local WAL
+#  and segments. Each carries a `meta` block for its Oxia connection.
+# *************************************************************************)
+
+[client]
+server = "127.0.0.1:7070"
+log_level = "info"
+meta.service_address = "localhost:6648"
+meta.namespace = "default"
+
+[stream]
+wal_dir = "/tmp/lyra-wal"
+io_mode = "standard"
+segments_dir = "/tmp/lyra-segments"
+meta.service_address = "localhost:6648"
+meta.namespace = "default"

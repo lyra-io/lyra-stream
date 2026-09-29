@@ -14,7 +14,7 @@ pub use options::LogOptions;
 
 use async_trait::async_trait;
 use bytes::Bytes;
-use meta::utils::promise::Promise;
+use lyra_meta::utils::promise::Promise;
 
 /// A monotonically increasing WAL record identifier.
 pub type Sequence = u64;

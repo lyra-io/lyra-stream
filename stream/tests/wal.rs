@@ -3,7 +3,7 @@ use std::collections::BTreeSet;
 use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
-use stream::{Log, LogOptions, SegmentLog, WalError};
+use lyra_stream::{Log, LogOptions, SegmentLog, WalError};
 
 fn standard_options(path: &Path) -> LogOptions {
     LogOptions::new(path, true)

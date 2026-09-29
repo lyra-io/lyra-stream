@@ -1,7 +1,7 @@
 //! Unit configuration, split by component.
 //!
-//! The config file (`options/lyra.toml`) mirrors the crate split: [`stream`]
-//! owns the local WAL and segments, and [`LiblyraOptions`] covers the
+//! The config file (`options/lyra-stream.toml`) mirrors the crate split: [`stream`]
+//! owns the local WAL and segments, and [`ClientOptions`] covers the
 //! client-facing unit settings. Every component carries a [`MetaOptions`]
 //! section for its metadata-service connection.
 
@@ -12,7 +12,7 @@ use serde::Deserialize;
 #[derive(Debug, Deserialize)]
 pub struct UnitOptions {
     #[serde(default)]
-    pub liblyra: LiblyraOptions,
+    pub client: ClientOptions,
     #[serde(default)]
     pub stream: stream::StreamOptions,
 }
@@ -20,14 +20,14 @@ pub struct UnitOptions {
 impl Default for UnitOptions {
     fn default() -> Self {
         Self {
-            liblyra: LiblyraOptions::default(),
+            client: ClientOptions::default(),
             stream: stream::StreamOptions::default(),
         }
     }
 }
 
 #[derive(Debug, Deserialize)]
-pub struct LiblyraOptions {
+pub struct ClientOptions {
     #[serde(default = "default_server")]
     pub server: String,
     #[serde(default = "default_log_level")]
@@ -36,7 +36,7 @@ pub struct LiblyraOptions {
     pub meta: MetaOptions,
 }
 
-impl Default for LiblyraOptions {
+impl Default for ClientOptions {
     fn default() -> Self {
         Self {
             server: default_server(),

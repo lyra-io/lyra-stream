@@ -6,7 +6,7 @@ use super::ops::{AdvancedSequence, AppendCompletion, DirtySegmentQueue};
 use super::options::LogOptions;
 use super::segment::{SegmentSyncHandle, sync_all};
 use crate::vfs::VfsI;
-use meta::utils::logging::utils::log_ignore;
+use lyra_meta::utils::logging::utils::log_ignore;
 use std::path::{Path, PathBuf};
 use std::thread::{Builder as ThreadBuilder, JoinHandle};
 use std::time::Duration;

@@ -1,20 +1,22 @@
 [package]
-name = "liblyra"
-version = "0.1.0"
-edition = "2024"
-resolver = "3"
+name = "lyra-stream-client"
+description = "gRPC client for the Lyra stream service."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
 
 [dependencies]
-meta = { path = "../../lyrad/meta" }
+lyra-stream-proto = { path = "../proto" }
 async-trait = { workspace = true }
-thiserror = { workspace = true }
+backoff = { workspace = true }
+dashmap = { workspace = true }
 futures-util = { workspace = true }
+opentelemetry = { workspace = true }
+opentelemetry_sdk = { workspace = true }
+serde = { workspace = true }
+thiserror = { workspace = true }
 tokio = { workspace = true }
 tokio-stream = { workspace = true }
 tonic = { workspace = true }
-dashmap = { workspace = true }
 tracing = { workspace = true }
-serde = { workspace = true }
-opentelemetry = { workspace = true }
-opentelemetry_sdk = { workspace = true }
-backoff = { version = "0.4", features = ["tokio"] }

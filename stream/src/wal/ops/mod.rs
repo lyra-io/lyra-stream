@@ -4,7 +4,7 @@ use super::Sequence;
 use super::error::WalError;
 use super::segment::SegmentSyncHandle;
 use bytes::Bytes;
-use meta::utils::promise::PromiseHandle;
+use lyra_meta::utils::promise::PromiseHandle;
 use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
 

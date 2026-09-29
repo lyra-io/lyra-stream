@@ -2,7 +2,7 @@ use bytes::Bytes;
 use std::collections::VecDeque;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use stream::{Log, LogOptions, SegmentLog};
+use lyra_stream::{Log, LogOptions, SegmentLog};
 
 #[tokio::main(flavor = "multi_thread")]
 async fn main() {
@@ -54,7 +54,7 @@ async fn run(name: &str, records: usize, payload_size: usize, concurrency: usize
                 promise.await?;
                 latencies.push(append_started.elapsed());
             }
-            Ok::<_, stream::WalError>(latencies)
+            Ok::<_, lyra_stream::WalError>(latencies)
         }));
     }
 

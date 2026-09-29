@@ -1,0 +1,35 @@
+[workspace]
+resolver = "3"
+members = ["proto", "stream", "client", "cli"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "Apache-2.0"
+repository = "https://github.com/lyra-io/lyra-stream"
+
+[workspace.dependencies]
+lyra-meta = { git = "https://github.com/lyra-io/lyra-meta", branch = "main" }
+async-trait = "0.1"
+backoff = { version = "0.4", features = ["tokio"] }
+bytes = "1.10"
+clap = { version = "4.5", features = ["derive"] }
+crc32c = "0.6"
+crossbeam-skiplist = "0.1"
+dashmap = "6.1"
+futures-util = "0.3"
+libc = "0.2"
+opentelemetry = "0.29"
+opentelemetry_sdk = { version = "0.29", features = ["spec_unstable_metrics_views"] }
+prost = "0.13"
+prost-build = "0.13.5"
+serde = { version = "1.0", features = ["derive"] }
+thiserror = "2.0"
+tokio = { version = "1.47", features = ["full"] }
+tokio-stream = "0.1"
+tokio-util = "0.7"
+toml = "0.9"
+tonic = "0.13"
+tonic-build = "0.13.1"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
