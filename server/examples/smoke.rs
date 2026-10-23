@@ -7,7 +7,9 @@ use tonic::Request;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let mut client = LyraClient::connect("http://127.0.0.1:7070").await?;
+    let address =
+        std::env::var("LYRA_ADDR").unwrap_or_else(|_| "http://127.0.0.1:7070".to_string());
+    let mut client = LyraClient::connect(address).await?;
 
     let appends = vec![AppendEventsRequest {
         items: vec![AppendEventsRequestItem {
