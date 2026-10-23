@@ -1,0 +1,22 @@
+[package]
+name = "lyra-stream-server"
+description = "Minimal standalone Lyra stream gRPC server."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "lyra-stream"
+path = "src/main.rs"
+
+[dependencies]
+lyra-stream = { path = "../stream" }
+lyra-stream-proto = { path = "../proto" }
+bytes = { workspace = true }
+clap = { workspace = true }
+tokio = { workspace = true }
+tokio-stream = { workspace = true }
+tonic = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
