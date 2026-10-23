@@ -9,7 +9,7 @@ license = "Apache-2.0"
 repository = "https://github.com/lyra-io/lyra-stream"
 
 [workspace.dependencies]
-lyra-meta = { git = "https://github.com/lyra-io/lyra-meta", branch = "main" }
+lyra-meta = { git = "https://github.com/lyra-io/lyra-meta", rev = "d9597ab543eda55b435197ac9e961fc60d351b12" }
 async-trait = "0.1"
 backoff = { version = "0.4", features = ["tokio"] }
 bytes = "1.10"
