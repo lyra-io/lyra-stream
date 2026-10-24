@@ -1,15 +1,15 @@
 use bytes::Bytes;
 use clap::Parser;
-use lyra_stream::{Log, LogOptions, SegmentLog, Sequence};
+use lyra_stream::{Log, LogOptions, SegmentLog};
 use lyra_stream_proto::pb_stream::lyra_server::{Lyra, LyraServer};
 use lyra_stream_proto::pb_stream::{
     AppendEventsRequest, AppendEventsResponse, Event, FenceRequest, FenceResponse,
     ReadEventsRequest, ReadEventsResponse,
 };
-use std::collections::BTreeMap;
+use rocksdb::{DB, Direction, IteratorMode, Options};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicI64, Ordering};
-use tokio::sync::{RwLock, mpsc};
+use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
 use tonic::{Request, Response, Status, Streaming};
 
@@ -22,15 +22,47 @@ struct Cli {
     /// Directory for the write-ahead log.
     #[arg(long, default_value = "/tmp/lyra-wal")]
     wal_dir: String,
+    /// Directory for the RocksDB index.
+    #[arg(long, default_value = "/tmp/lyra-db")]
+    db_dir: String,
 }
 
-/// Minimal single-node state: a WAL for durability plus an in-memory memstream
-/// that serves reads.
+/// Single-node state: a WAL for append durability and RocksDB as the durable
+/// record store that serves reads.
 #[derive(Clone)]
 struct State {
     log: Arc<SegmentLog>,
-    store: Arc<RwLock<BTreeMap<Sequence, Bytes>>>,
+    db: Arc<DB>,
     term: Arc<AtomicI64>,
+}
+
+/// Encodes `(stream_id, offset)` as a 16-byte sortable key.
+fn record_key(stream_id: i64, offset: i64) -> [u8; 16] {
+    let mut key = [0u8; 16];
+    key[..8].copy_from_slice(&stream_id.to_be_bytes());
+    key[8..].copy_from_slice(&offset.to_be_bytes());
+    key
+}
+
+fn db_range(db: &DB, stream_id: i64, start: i64, end: i64) -> Vec<(i64, Bytes)> {
+    let mut out = Vec::new();
+    let start_key = record_key(stream_id, start);
+    for item in db.iterator(IteratorMode::From(&start_key, Direction::Forward)) {
+        let Ok((key, value)) = item else { break };
+        if key.len() != 16 {
+            break;
+        }
+        let sid = i64::from_be_bytes(key[..8].try_into().unwrap());
+        if sid != stream_id {
+            break;
+        }
+        let offset = i64::from_be_bytes(key[8..].try_into().unwrap());
+        if offset >= end {
+            break;
+        }
+        out.push((offset, Bytes::from(value)));
+    }
+    out
 }
 
 #[tonic::async_trait]
@@ -59,10 +91,14 @@ impl Lyra for State {
                         .append(payload.clone())
                         .await
                         .map_err(|error| Status::internal(error.to_string()))?;
-                    state.store.write().await.insert(sequence, payload);
+                    let offset = sequence as i64;
+                    state
+                        .db
+                        .put(record_key(event.stream_id, offset), &payload)
+                        .map_err(|error| Status::internal(error.to_string()))?;
                     let response = AppendEventsResponse {
                         code: 0,
-                        commit_offset: sequence as i64,
+                        commit_offset: offset,
                         stream_id: event.stream_id,
                         term: event.term,
                     };
@@ -89,10 +125,8 @@ impl Lyra for State {
                 .await
                 .map_err(|error| Status::internal(error.to_string()))?
             {
-                let store = state.store.read().await;
-                let start = u64::try_from(req.start_offset).unwrap_or(0);
-                let end = u64::try_from(req.end_offset).unwrap_or(u64::MAX);
-                for (sequence, payload) in store.range(start..end) {
+                let records = db_range(&state.db, req.stream_id, req.start_offset, req.end_offset);
+                for (offset, payload) in records {
                     let response = ReadEventsResponse {
                         code: 0,
                         r#type: 0,
@@ -100,13 +134,13 @@ impl Lyra for State {
                         event: vec![Event {
                             stream_id: req.stream_id,
                             term: state.term.load(Ordering::SeqCst),
-                            offset: *sequence as i64,
-                            payload: Some(payload.clone()),
+                            offset,
+                            payload: Some(payload),
                             crc32: None,
                             timestamp: 0,
                             schema_id: 0,
                         }],
-                        advanced_offset: *sequence as i64,
+                        advanced_offset: offset,
                     };
                     if tx.send(Ok(response)).await.is_err() {
                         return Ok::<(), Status>(());
@@ -137,10 +171,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing_subscriber::fmt().with_env_filter("info").init();
     let cli = Cli::parse();
     lyra_stream_cli::banner::print_banner("Stream");
+    tracing::info!(
+        listen = %cli.listen,
+        wal_dir = %cli.wal_dir,
+        db_dir = %cli.db_dir,
+        "stream configuration"
+    );
     let log = SegmentLog::open(LogOptions::new(&cli.wal_dir, true)).await?;
+    let mut db_options = Options::default();
+    db_options.create_if_missing(true);
+    let db = DB::open(&db_options, &cli.db_dir)?;
     let state = State {
         log,
-        store: Arc::new(RwLock::new(BTreeMap::new())),
+        db: Arc::new(db),
         term: Arc::new(AtomicI64::new(1)),
     };
     let address = cli.listen.parse()?;
