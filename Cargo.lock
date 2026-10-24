@@ -965,6 +965,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "lyra-stream-chaos"
+version = "0.1.0"
+dependencies = [
+ "bytes",
+ "clap",
+ "lyra-stream-proto",
+ "serde",
+ "tokio",
+ "tokio-stream",
+ "toml",
+ "tonic",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "lyra-stream-cli"
 version = "0.1.0"
 dependencies = [
