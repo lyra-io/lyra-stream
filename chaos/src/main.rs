@@ -6,7 +6,10 @@ use lyra_stream_proto::pb_stream::{
 };
 use serde::Deserialize;
 use std::collections::BTreeSet;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
+use tokio::sync::{mpsc, watch};
 use tokio::time::sleep;
 use tonic::Request;
 use tonic::transport::Endpoint;
@@ -16,7 +19,6 @@ use tonic::transport::Endpoint;
 struct Case {
     stream_id: i64,
     mode: String,
-    records: u64,
 }
 
 impl Default for Case {
@@ -24,7 +26,6 @@ impl Default for Case {
         Self {
             stream_id: 1,
             mode: "primary-offset".into(),
-            records: 10_000,
         }
     }
 }
@@ -37,6 +38,18 @@ struct Cli {
     /// Test case template (TOML).
     #[arg(long, default_value = "cases/primary-offset.toml")]
     case: String,
+    /// Total soak duration in seconds. Defaults to 8 hours.
+    #[arg(long, default_value = "28800")]
+    duration_secs: u64,
+    /// Number of streams; each stream gets a writer and a reader coroutine.
+    #[arg(long, default_value = "10")]
+    streams: u64,
+    /// Pause between writer appends, in milliseconds.
+    #[arg(long, default_value = "20")]
+    write_pause_ms: u64,
+    /// Log a reader summary every this many successful reads.
+    #[arg(long, default_value = "100")]
+    log_every: u64,
 }
 
 fn event(stream_id: i64, offset: i64, payload: &'static [u8]) -> AppendEventsRequest {
@@ -66,7 +79,118 @@ async fn connect(address: &str) -> LyraClient<tonic::transport::Channel> {
             .await
         {
             Ok(channel) => return LyraClient::new(channel),
-            Err(_) => sleep(Duration::from_secs(1)).await,
+            Err(error) => {
+                tracing::debug!(%error, "connection failed; retrying");
+                sleep(Duration::from_secs(1)).await;
+            }
+        }
+    }
+}
+
+/// One read attempt over a live connection; returns the offsets present.
+async fn read_once(
+    reader: &mut LyraClient<tonic::transport::Channel>,
+    stream_id: i64,
+    start: i64,
+    end: i64,
+) -> Result<BTreeSet<i64>, tonic::Status> {
+    let request = Request::new(tokio_stream::iter(vec![ReadEventsRequest {
+        stream_id,
+        start_offset: start,
+        end_offset: end,
+    }]));
+    let response = reader.read(request).await?;
+    let mut stream = response.into_inner();
+    let mut present = BTreeSet::new();
+    while let Some(resp) = stream.message().await? {
+        for e in resp.event {
+            present.insert(e.offset);
+        }
+    }
+    Ok(present)
+}
+
+/// Writer coroutine: appends events and publishes the latest write offset via
+/// a watch channel so the reader can follow without polling.
+async fn writer_loop(
+    address: String,
+    stream_id: i64,
+    write_tx: watch::Sender<i64>,
+    stop: Arc<AtomicBool>,
+    pause_ms: u64,
+) {
+    let mut writer = connect(&address).await;
+    let mut local = 0i64;
+    while !stop.load(Ordering::Relaxed) {
+        let request = Request::new(tokio_stream::iter([event(stream_id, local, b"x")]));
+        match writer.append(request).await {
+            Ok(response) => {
+                let mut stream = response.into_inner();
+                match stream.message().await {
+                    Ok(Some(resp)) => {
+                        let _ = write_tx.send(resp.commit_offset);
+                        local += 1;
+                    }
+                    Ok(None) => {}
+                    Err(_) => writer = connect(&address).await,
+                }
+            }
+            Err(_) => writer = connect(&address).await,
+        }
+        if pause_ms > 0 {
+            sleep(Duration::from_millis(pause_ms)).await;
+        }
+    }
+}
+
+/// Reader coroutine: wakes on each write notification, reads back the new
+/// range, and advances the verified offset. An empty read where a record was
+/// expected is a write/read violation.
+async fn reader_loop(
+    address: String,
+    stream_id: i64,
+    mut write_rx: watch::Receiver<i64>,
+    stop: Arc<AtomicBool>,
+    error_tx: mpsc::Sender<(i64, String)>,
+    log_every: u64,
+) {
+    let mut reader = connect(&address).await;
+    let mut verified: Option<i64> = None;
+    let mut reads = 0u64;
+    while !stop.load(Ordering::Relaxed) {
+        if write_rx.changed().await.is_err() {
+            break;
+        }
+        let target = *write_rx.borrow();
+        let from = verified.map_or(target, |v| v.saturating_add(1));
+        while from <= target && !stop.load(Ordering::Relaxed) {
+            let present = match read_once(&mut reader, stream_id, from, target + 1).await {
+                Ok(present) => present,
+                Err(error) => {
+                    tracing::warn!(%error, stream_id, "read failed; reconnecting");
+                    reader = connect(&address).await;
+                    continue;
+                }
+            };
+            if present.is_empty() {
+                let error = format!("writer offset {target} not readable from {from}");
+                tracing::error!(stream_id, from, target, "write/read VIOLATION");
+                let _ = error_tx.send((stream_id, error)).await;
+                return;
+            }
+            let max_present = present.iter().max().copied().unwrap();
+            verified = Some(max_present);
+            reads += 1;
+            if log_every > 0 && reads % log_every == 0 {
+                tracing::info!(
+                    stream_id,
+                    write = target,
+                    verified = max_present,
+                    reads,
+                    "reader verified"
+                );
+            }
+            break;
         }
     }
 }
@@ -76,79 +200,54 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing_subscriber::fmt().with_env_filter("info").init();
     let cli = Cli::parse();
     let case: Case = toml::from_str(&std::fs::read_to_string(&cli.case)?)?;
-    tracing::info!(?case, address = %cli.address, "chaos case");
+    tracing::info!(
+        ?case,
+        address = %cli.address,
+        duration_secs = cli.duration_secs,
+        streams = cli.streams,
+        write_pause_ms = cli.write_pause_ms,
+        "chaos soak starting"
+    );
 
     if case.mode != "primary-offset" {
-        anyhow_like_exit(&format!("unsupported mode {}", case.mode));
+        eprintln!("error: unsupported mode {}", case.mode);
+        std::process::exit(2);
     }
 
-    // Writer: append records, tracking acknowledged offsets only.
-    let mut acked: BTreeSet<i64> = BTreeSet::new();
-    let mut writer = connect(&cli.address).await;
-    let mut written = 0u64;
-    while written < case.records {
-        match writer
-            .append(Request::new(tokio_stream::iter([event(
-                case.stream_id,
-                written as i64,
-                b"x",
-            )])))
-            .await
-        {
-            Ok(response) => {
-                let mut stream = response.into_inner();
-                match stream.message().await {
-                    Ok(Some(resp)) => {
-                        acked.insert(resp.commit_offset);
-                        written += 1;
-                    }
-                    Ok(None) => {}
-                    Err(_) => writer = connect(&cli.address).await,
-                }
-            }
-            Err(_) => writer = connect(&cli.address).await,
+    let stop = Arc::new(AtomicBool::new(false));
+    let (error_tx, mut error_rx) = mpsc::channel(cli.streams as usize);
+    for index in 0..cli.streams {
+        let stream_id = case.stream_id + index as i64;
+        let (write_tx, write_rx) = watch::channel(-1i64);
+        tokio::spawn(writer_loop(
+            cli.address.clone(),
+            stream_id,
+            write_tx,
+            stop.clone(),
+            cli.write_pause_ms,
+        ));
+        tokio::spawn(reader_loop(
+            cli.address.clone(),
+            stream_id,
+            write_rx,
+            stop.clone(),
+            error_tx.clone(),
+            cli.log_every,
+        ));
+    }
+    drop(error_tx);
+
+    tokio::select! {
+        Some((stream_id, error)) = error_rx.recv() => {
+            tracing::error!(stream_id, error = %error, "soak failed");
+            stop.store(true, Ordering::Relaxed);
+            std::process::exit(1);
         }
-        if written % 1_000 == 0 {
-            tracing::info!(written, acked = acked.len(), "writing");
+        _ = sleep(Duration::from_secs(cli.duration_secs)) => {
+            tracing::info!("soak complete: duration reached, no write/read violations");
+            stop.store(true, Ordering::Relaxed);
         }
     }
 
-    // Reader: read every record back and verify acknowledged records are present.
-    let mut reader = connect(&cli.address).await;
-    let end = acked.iter().max().map_or(0, |max| max + 1);
-    let reads = vec![ReadEventsRequest {
-        stream_id: case.stream_id,
-        start_offset: 0,
-        end_offset: end,
-    }];
-    let mut present: BTreeSet<i64> = BTreeSet::new();
-    match reader.read(Request::new(tokio_stream::iter(reads))).await {
-        Ok(response) => {
-            let mut stream = response.into_inner();
-            while let Ok(Some(resp)) = stream.message().await {
-                for e in resp.event {
-                    present.insert(e.offset);
-                }
-            }
-        }
-        Err(error) => tracing::error!(%error, "read failed"),
-    }
-
-    let missing: Vec<i64> = acked.difference(&present).copied().collect();
-    if missing.is_empty() {
-        tracing::info!(
-            acked = acked.len(),
-            present = present.len(),
-            "at-least-once verified: no acknowledged record is missing"
-        );
-        Ok(())
-    } else {
-        tracing::error!(missing = ?missing, acked = acked.len(), present = present.len(), "at-least-once VIOLATION");
-        std::process::exit(1);
-    }
-}
-
-fn anyhow_like_exit(message: &str) -> ! {
-    eprintln!("error: {message}");
-    std::process::exit(2);
+    Ok(())
 }

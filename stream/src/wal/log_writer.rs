@@ -17,13 +17,35 @@ use std::collections::VecDeque;
 use std::io::ErrorKind;
 use std::path::Path;
 use std::thread::{Builder as ThreadBuilder, JoinHandle};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use tokio::sync::mpsc::error::TrySendError;
 use tokio::sync::{Mutex, RwLock, mpsc, oneshot, watch};
 
 const CLOSE_TIMEOUT: Duration = Duration::from_secs(30);
 const LOCK_FILE_NAME: &str = ".lyra-wal.lock";
+const LOCK_RETRY_TIMEOUT: Duration = Duration::from_secs(30);
+const LOCK_RETRY_INTERVAL: Duration = Duration::from_millis(250);
 const RECOVERY_READ_SIZE: usize = WAL_SEGMENT_SIZE as usize;
+
+/// Acquires the WAL directory lock, retrying briefly while the previous
+/// process releases its flock. A replacement pod can start before the killed
+/// pod has finished tearing down, so fail fast only after the retry window.
+fn acquire_directory_lock(dir: &Path) -> Result<DirectoryLock, WalError> {
+    let lock_path = dir.join(LOCK_FILE_NAME);
+    let deadline = Instant::now() + LOCK_RETRY_TIMEOUT;
+    loop {
+        match DirectoryLock::acquire(&lock_path) {
+            Ok(lock) => return Ok(lock),
+            Err(error) if error.kind() == ErrorKind::WouldBlock => {
+                if Instant::now() >= deadline {
+                    return Err(WalError::Locked(dir.to_path_buf()));
+                }
+                std::thread::sleep(LOCK_RETRY_INTERVAL);
+            }
+            Err(error) => return Err(error.into()),
+        }
+    }
+}
 
 #[derive(Debug)]
 struct RecoveredState {
@@ -98,15 +120,7 @@ impl LogWriter {
         let (done_tx, done) = oneshot::channel();
         let handle = ThreadBuilder::new().name("lyra-wal-writer".into()).spawn({
             move || {
-                match DirectoryLock::acquire(options.dir.join(LOCK_FILE_NAME))
-                    .map_err(|error| {
-                        if error.kind() == ErrorKind::WouldBlock {
-                            WalError::Locked(options.dir.clone())
-                        } else {
-                            error.into()
-                        }
-                    })
-                    .and_then(|directory_lock| {
+                match acquire_directory_lock(&options.dir).and_then(|directory_lock| {
                         WriterLoop::new(
                             operation_rx,
                             advanced_tx,
