@@ -5,6 +5,7 @@
 
 pub mod vfs;
 pub mod wal;
+pub mod storage;
 
 pub use lyra_meta::utils::promise::Promise;
 pub use wal::{Log, LogOptions, SegmentLog, Sequence, WalError};

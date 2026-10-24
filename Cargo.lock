@@ -955,6 +955,7 @@ dependencies = [
  "async-trait",
  "bytes",
  "crc32c",
+ "dashmap",
  "libc",
  "lyra-meta",
  "tempfile",
