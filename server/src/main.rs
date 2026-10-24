@@ -9,9 +9,12 @@ use lyra_stream_proto::pb_stream::{
 use rocksdb::{DB, Direction, IteratorMode, Options};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicI64, Ordering};
+use std::time::Instant;
 use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
 use tonic::{Request, Response, Status, Streaming};
+
+mod observability;
 
 #[derive(Parser)]
 #[command(name = "lyra-stream", about = "Lyra streaming storage")]
@@ -25,6 +28,9 @@ struct Cli {
     /// Directory for the RocksDB index.
     #[arg(long, default_value = "/tmp/lyra-db")]
     db_dir: String,
+    /// Bind address for the metrics/pprof HTTP server.
+    #[arg(long, default_value = "0.0.0.0:9090")]
+    metrics_listen: String,
 }
 
 /// Single-node state: a WAL for append durability and RocksDB as the durable
@@ -34,6 +40,7 @@ struct State {
     log: Arc<SegmentLog>,
     db: Arc<DB>,
     term: Arc<AtomicI64>,
+    metrics: Arc<observability::Metrics>,
 }
 
 /// Encodes `(stream_id, offset)` as a 16-byte sortable key.
@@ -86,16 +93,22 @@ impl Lyra for State {
                 for item in req.items {
                     let Some(event) = item.event else { continue };
                     let payload = event.payload.unwrap_or_default();
+                    let started = Instant::now();
                     let sequence = state
                         .log
                         .append(payload.clone())
                         .await
                         .map_err(|error| Status::internal(error.to_string()))?;
+                    state
+                        .metrics
+                        .append_duration
+                        .record(started.elapsed().as_secs_f64(), &[]);
                     let offset = sequence as i64;
                     state
                         .db
                         .put(record_key(event.stream_id, offset), &payload)
                         .map_err(|error| Status::internal(error.to_string()))?;
+                    state.metrics.append_total.add(1, &[]);
                     let response = AppendEventsResponse {
                         code: 0,
                         commit_offset: offset,
@@ -175,8 +188,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         listen = %cli.listen,
         wal_dir = %cli.wal_dir,
         db_dir = %cli.db_dir,
+        metrics_listen = %cli.metrics_listen,
         "stream configuration"
     );
+    let (metrics, registry) = observability::init();
+    let metrics_listen: std::net::SocketAddr = cli.metrics_listen.parse()?;
+    tokio::spawn(observability::serve(registry, metrics_listen));
     let log = SegmentLog::open(LogOptions::new(&cli.wal_dir, true)).await?;
     let mut db_options = Options::default();
     db_options.create_if_missing(true);
@@ -185,6 +202,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         log,
         db: Arc::new(db),
         term: Arc::new(AtomicI64::new(1)),
+        metrics: Arc::new(metrics),
     };
     let address = cli.listen.parse()?;
     tracing::info!(%address, "stream server listening");
