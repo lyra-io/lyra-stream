@@ -14,8 +14,15 @@ path = "src/main.rs"
 lyra-stream = { path = "../stream" }
 lyra-stream-cli = { path = "../cli" }
 lyra-stream-proto = { path = "../proto" }
+axum = "0.8"
 bytes = { workspace = true }
 clap = { workspace = true }
+opentelemetry = { version = "0.29", features = ["metrics"] }
+opentelemetry-prometheus = "0.29"
+opentelemetry_sdk = { version = "0.29", features = ["metrics"] }
+pprof = { version = "0.13", features = ["flamegraph"] }
+prometheus = "0.14"
+rocksdb = "0.22"
 tokio = { workspace = true }
 tokio-stream = { workspace = true }
 tonic = { workspace = true }

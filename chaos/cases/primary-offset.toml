@@ -1,0 +1,4 @@
+# Template: at-least-once over the primary stream offset.
+stream_id = 1
+mode = "primary-offset"
+records = 10000
