@@ -7,11 +7,12 @@ license.workspace = true
 repository.workspace = true
 
 [[bin]]
-name = "lyra-stream"
+name = "lyra-stream-server"
 path = "src/main.rs"
 
 [dependencies]
 lyra-stream = { path = "../stream" }
+lyra-stream-cli = { path = "../cli" }
 lyra-stream-proto = { path = "../proto" }
 bytes = { workspace = true }
 clap = { workspace = true }

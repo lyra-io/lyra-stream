@@ -136,6 +136,7 @@ impl Lyra for State {
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing_subscriber::fmt().with_env_filter("info").init();
     let cli = Cli::parse();
+    lyra_stream_cli::banner::print_banner("Stream");
     let log = SegmentLog::open(LogOptions::new(&cli.wal_dir, true)).await?;
     let state = State {
         log,

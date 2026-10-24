@@ -752,6 +752,7 @@ dependencies = [
  "bytes",
  "clap",
  "lyra-stream",
+ "lyra-stream-cli",
  "lyra-stream-proto",
  "tokio",
  "tokio-stream",
