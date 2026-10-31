@@ -1,5 +1,6 @@
 //! Stateful write-ahead log API.
 
+mod checkpoint;
 mod error;
 mod log;
 mod log_syncer;
@@ -7,14 +8,17 @@ mod log_writer;
 mod ops;
 mod options;
 mod segment;
+pub mod shared;
 
+pub use crate::format::record::WalRecord;
 pub use error::WalError;
 pub use log::SegmentLog;
 pub use options::LogOptions;
+pub use shared::{SharedWal, SharedWalError};
 
+use crate::vfs::{StandardVfs, VfsI};
 use async_trait::async_trait;
 use bytes::Bytes;
-use crate::vfs::{StandardVfs, VfsI};
 use lyra_meta::utils::promise::Promise;
 use std::path::Path;
 
@@ -53,13 +57,8 @@ pub fn replay(dir: &Path) -> Result<Vec<(Sequence, Bytes)>, WalError> {
             });
         }
 
-        let segment = segment::FileSegment::open(
-            &vfs,
-            &path,
-            file_number,
-            WAL_SEGMENT_SIZE,
-            file_size,
-        )?;
+        let segment =
+            segment::FileSegment::open(&vfs, &path, file_number, WAL_SEGMENT_SIZE, file_size)?;
         let final_segment = index + 1 == segment_count;
         let mut position = 0u64;
         while position < file_size {

@@ -121,16 +121,16 @@ impl LogWriter {
         let handle = ThreadBuilder::new().name("lyra-wal-writer".into()).spawn({
             move || {
                 match acquire_directory_lock(&options.dir).and_then(|directory_lock| {
-                        WriterLoop::new(
-                            operation_rx,
-                            advanced_tx,
-                            dirty_segments,
-                            completion_tx,
-                            vfs,
-                            options,
-                        )
-                        .map(|writer_loop| (directory_lock, writer_loop))
-                    }) {
+                    WriterLoop::new(
+                        operation_rx,
+                        advanced_tx,
+                        dirty_segments,
+                        completion_tx,
+                        vfs,
+                        options,
+                    )
+                    .map(|writer_loop| (directory_lock, writer_loop))
+                }) {
                     Ok((directory_lock, writer_loop)) => {
                         if started_tx.send(Ok(())).is_ok() {
                             writer_loop.run();

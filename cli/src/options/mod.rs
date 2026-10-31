@@ -9,21 +9,12 @@ pub mod stream;
 
 use serde::Deserialize;
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Default, Deserialize)]
 pub struct UnitOptions {
     #[serde(default)]
     pub client: ClientOptions,
     #[serde(default)]
     pub stream: stream::StreamOptions,
-}
-
-impl Default for UnitOptions {
-    fn default() -> Self {
-        Self {
-            client: ClientOptions::default(),
-            stream: stream::StreamOptions::default(),
-        }
-    }
 }
 
 #[derive(Debug, Deserialize)]

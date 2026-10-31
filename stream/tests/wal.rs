@@ -1,9 +1,9 @@
 use bytes::Bytes;
+use lyra_stream::{Log, LogOptions, SegmentLog, WalError};
 use std::collections::BTreeSet;
 use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
-use lyra_stream::{Log, LogOptions, SegmentLog, WalError};
 
 fn standard_options(path: &Path) -> LogOptions {
     LogOptions::new(path, true)

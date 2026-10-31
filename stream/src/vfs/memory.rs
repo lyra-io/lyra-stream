@@ -90,6 +90,19 @@ impl Vfs for MemoryVfs {
             .ok_or_else(|| Error::new(ErrorKind::NotFound, "file does not exist"))
     }
 
+    fn rename(&self, from: &Path, to: &Path) -> Result<()> {
+        let mut state = self.state.write().unwrap();
+        let file = state
+            .files
+            .remove(from)
+            .ok_or_else(|| Error::new(ErrorKind::NotFound, "file does not exist"))?;
+        state.files.insert(to.to_path_buf(), file);
+        if let Some(parent) = to.parent() {
+            state.directories.insert(parent.to_path_buf());
+        }
+        Ok(())
+    }
+
     fn sync(&self, dir: &Path) -> Result<()> {
         let state = self.state.read().unwrap();
         if state.directories.contains(dir) {

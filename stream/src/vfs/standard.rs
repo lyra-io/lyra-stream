@@ -61,6 +61,10 @@ impl Vfs for StandardVfs {
         std::fs::remove_file(path)
     }
 
+    fn rename(&self, from: &Path, to: &Path) -> Result<()> {
+        std::fs::rename(from, to)
+    }
+
     fn sync(&self, dir: &Path) -> Result<()> {
         File::open(dir)?.sync_all()
     }
