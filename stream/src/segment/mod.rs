@@ -1,8 +1,20 @@
 //! Shared segment files used by both the WAL and stream storage.
 //!
-//! A segment is just an append-only buffer file with no framing. Callers store
-//! raw buffers and remember positions; recovery code owns any record framing it
-//! needs on top of those buffers.
+//! # Segment format
+//!
+//! A segment is a fixed-size, append-only file named `{segment_id:010}.seg`
+//! (for example `0000000000.seg`). The file contains raw buffers only:
+//!
+//! ```text
+//! ┌──────────────────────────────────────────────┐
+//! │ buffer bytes...                              │
+//! │ (no header, no length prefix, no checksum)   │
+//! └──────────────────────────────────────────────┘
+//! ```
+//!
+//! Callers store raw buffers and remember `(segment_id, offset, len)`
+//! positions. There is deliberately no framing inside the segment: the WAL and
+//! stream store each own the record format layered on top of these buffers.
 
 mod file;
 mod set;

@@ -7,6 +7,7 @@ mod log_syncer;
 mod log_writer;
 mod ops;
 mod options;
+mod record;
 mod segment;
 pub mod shared;
 
