@@ -1,6 +1,5 @@
-use bytes::Bytes;
 use clap::Parser;
-use lyra_stream::storage::{Storage, StorageOptions};
+use lyra_stream::streams::{PageCacheStream, StreamOptions, StreamStorage};
 use lyra_stream_proto::pb_stream::lyra_server::{Lyra, LyraServer};
 use lyra_stream_proto::pb_stream::{
     AppendEventsRequest, AppendEventsResponse, Event, FenceRequest, FenceResponse,
@@ -48,7 +47,7 @@ struct Cli {
 /// Single-node state shared by the gRPC handlers.
 #[derive(Clone)]
 struct State {
-    storage: Arc<Storage>,
+    storage: Arc<dyn StreamStorage>,
     term: Arc<AtomicI64>,
     metrics: Arc<observability::Metrics>,
 }
@@ -81,7 +80,7 @@ impl Lyra for State {
                     let started = Instant::now();
                     let offset = state
                         .storage
-                        .append(event.stream_id, Bytes::from(payload))
+                        .append(event.stream_id, payload)
                         .map_err(internal)?;
                     state
                         .metrics
@@ -189,9 +188,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         return Err("segment size must be greater than zero".into());
     }
     let data_dir = PathBuf::from(&cli.store_dir);
-    let storage = Arc::new(Storage::open(
+    let storage: Arc<dyn StreamStorage> = Arc::new(PageCacheStream::open_standard(
         &data_dir,
-        StorageOptions {
+        StreamOptions {
             segment_size: cli.segment_size,
         },
     )?);

@@ -13,7 +13,6 @@ bytes = { workspace = true }
 crc32c = { workspace = true }
 dashmap = { workspace = true }
 libc = { workspace = true }
-memmap2 = "0.9"
 thiserror = { workspace = true }
 tokio = { workspace = true }
 tokio-util = { workspace = true }

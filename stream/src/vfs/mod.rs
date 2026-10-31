@@ -1,10 +1,12 @@
 //! Virtual filesystem interfaces used by stream storage and WAL segments.
 
 mod direct;
+mod failpoint;
 mod memory;
 mod standard;
 
 pub use direct::{DirectFile, DirectVfs};
+pub use failpoint::{Failpoint, FailpointFile, FailpointHandle, FailpointVfs};
 pub use memory::{MemoryFile, MemoryVfs};
 pub use standard::{StandardFile, StandardVfs};
 
@@ -19,6 +21,7 @@ pub enum VfsFile {
     Memory(MemoryFile),
     Standard(StandardFile),
     Direct(DirectFile),
+    Failpoint(FailpointFile),
 }
 
 /// One of the supported virtual filesystem implementations.
@@ -27,6 +30,7 @@ pub enum VfsI {
     Memory(MemoryVfs),
     Standard(StandardVfs),
     Direct(DirectVfs),
+    Failpoint(FailpointVfs),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -73,6 +77,14 @@ pub trait Vfs: Debug + Send + Sync {
 
     fn remove(&self, path: &Path) -> Result<()>;
 
+    /// Moves `from` to `to`, replacing any existing destination file.
+    fn rename(&self, _from: &Path, _to: &Path) -> Result<()> {
+        Err(std::io::Error::new(
+            std::io::ErrorKind::Unsupported,
+            "rename is not supported by this virtual filesystem",
+        ))
+    }
+
     fn sync(&self, dir: &Path) -> Result<()>;
 }
 
@@ -82,6 +94,7 @@ impl Vfs for VfsI {
             Self::Memory(vfs) => vfs.alignment(),
             Self::Standard(vfs) => vfs.alignment(),
             Self::Direct(vfs) => vfs.alignment(),
+            Self::Failpoint(vfs) => vfs.alignment(),
         }
     }
 
@@ -90,6 +103,7 @@ impl Vfs for VfsI {
             Self::Memory(vfs) => vfs.create_dir(path),
             Self::Standard(vfs) => vfs.create_dir(path),
             Self::Direct(vfs) => vfs.create_dir(path),
+            Self::Failpoint(vfs) => vfs.create_dir(path),
         }
     }
 
@@ -98,6 +112,7 @@ impl Vfs for VfsI {
             Self::Memory(vfs) => vfs.open(path, options),
             Self::Standard(vfs) => vfs.open(path, options),
             Self::Direct(vfs) => vfs.open(path, options),
+            Self::Failpoint(vfs) => vfs.open(path, options),
         }
     }
 
@@ -106,6 +121,7 @@ impl Vfs for VfsI {
             Self::Memory(vfs) => vfs.list(dir),
             Self::Standard(vfs) => vfs.list(dir),
             Self::Direct(vfs) => vfs.list(dir),
+            Self::Failpoint(vfs) => vfs.list(dir),
         }
     }
 
@@ -114,6 +130,16 @@ impl Vfs for VfsI {
             Self::Memory(vfs) => vfs.remove(path),
             Self::Standard(vfs) => vfs.remove(path),
             Self::Direct(vfs) => vfs.remove(path),
+            Self::Failpoint(vfs) => vfs.remove(path),
+        }
+    }
+
+    fn rename(&self, from: &Path, to: &Path) -> Result<()> {
+        match self {
+            Self::Memory(vfs) => vfs.rename(from, to),
+            Self::Standard(vfs) => vfs.rename(from, to),
+            Self::Direct(vfs) => vfs.rename(from, to),
+            Self::Failpoint(vfs) => vfs.rename(from, to),
         }
     }
 
@@ -122,6 +148,7 @@ impl Vfs for VfsI {
             Self::Memory(vfs) => vfs.sync(dir),
             Self::Standard(vfs) => vfs.sync(dir),
             Self::Direct(vfs) => vfs.sync(dir),
+            Self::Failpoint(vfs) => vfs.sync(dir),
         }
     }
 }
@@ -132,6 +159,7 @@ impl IoFile for VfsFile {
             Self::Memory(file) => file.path(),
             Self::Standard(file) => file.path(),
             Self::Direct(file) => file.path(),
+            Self::Failpoint(file) => file.path(),
         }
     }
 
@@ -140,6 +168,7 @@ impl IoFile for VfsFile {
             Self::Memory(file) => file.size(),
             Self::Standard(file) => file.size(),
             Self::Direct(file) => file.size(),
+            Self::Failpoint(file) => file.size(),
         }
     }
 
@@ -148,6 +177,7 @@ impl IoFile for VfsFile {
             Self::Memory(file) => file.read_at(position, length),
             Self::Standard(file) => file.read_at(position, length),
             Self::Direct(file) => file.read_at(position, length),
+            Self::Failpoint(file) => file.read_at(position, length),
         }
     }
 
@@ -156,6 +186,7 @@ impl IoFile for VfsFile {
             Self::Memory(file) => file.append(bytes),
             Self::Standard(file) => file.append(bytes),
             Self::Direct(file) => file.append(bytes),
+            Self::Failpoint(file) => file.append(bytes),
         }
     }
 
@@ -164,6 +195,7 @@ impl IoFile for VfsFile {
             Self::Memory(file) => file.truncate(size),
             Self::Standard(file) => file.truncate(size),
             Self::Direct(file) => file.truncate(size),
+            Self::Failpoint(file) => file.truncate(size),
         }
     }
 
@@ -172,6 +204,7 @@ impl IoFile for VfsFile {
             Self::Memory(file) => file.sync(),
             Self::Standard(file) => file.sync(),
             Self::Direct(file) => file.sync(),
+            Self::Failpoint(file) => file.sync(),
         }
     }
 
@@ -180,6 +213,7 @@ impl IoFile for VfsFile {
             Self::Memory(file) => file.discard_cache(end),
             Self::Standard(file) => file.discard_cache(end),
             Self::Direct(file) => file.discard_cache(end),
+            Self::Failpoint(file) => file.discard_cache(end),
         }
     }
 }

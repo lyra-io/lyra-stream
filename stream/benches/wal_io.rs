@@ -1,8 +1,8 @@
 use bytes::Bytes;
+use lyra_stream::{Log, LogOptions, SegmentLog};
 use std::collections::VecDeque;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use lyra_stream::{Log, LogOptions, SegmentLog};
 
 #[tokio::main(flavor = "multi_thread")]
 async fn main() {

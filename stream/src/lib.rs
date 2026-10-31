@@ -3,9 +3,11 @@
 //! This crate owns mutable stream durability: write ordering, background WAL
 //! workers, local segment rotation, synchronization, and lifecycle.
 
+pub mod index;
+pub mod segment;
+pub mod streams;
 pub mod vfs;
 pub mod wal;
-pub mod storage;
 
 pub use lyra_meta::utils::promise::Promise;
 pub use wal::{Log, LogOptions, SegmentLog, Sequence, WalError};

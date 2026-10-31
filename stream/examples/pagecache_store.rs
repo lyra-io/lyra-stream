@@ -1,20 +1,20 @@
-//! Demonstrates the real storage engine:
+//! Demonstrates the page-cache stream storage:
 //!
 //! - appends are acknowledged only after the shared WAL is durable
-//! - reads are served from the mmap'd page-cache segments
-//! - a checkpoint snapshots the index and trims the WAL
-//! - reopening recovers pre-checkpoint records from the data store and the
+//! - reads are served from the raw segment files through the VFS
+//! - checkpoint asks the WAL to record and trim at the stream commit offset
+//! - reopening recovers pre-checkpoint records from the index snapshot and the
 //!   post-checkpoint tail from the WAL
 
 use bytes::Bytes;
-use lyra_stream::storage::{Storage, StorageOptions};
+use lyra_stream::streams::{PageCacheStream, StreamOptions, StreamStorage};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let dir = std::env::temp_dir().join("lyra-pagecache-example");
     let _ = std::fs::remove_dir_all(&dir);
 
     let known = {
-        let storage = Storage::open(&dir, StorageOptions::default())?;
+        let storage = PageCacheStream::open_standard(&dir, StreamOptions::default())?;
         let a = storage.append(1, Bytes::from_static(b"hello"))?;
         let b = storage.append(2, Bytes::from_static(b"world"))?;
         let c = storage.append(1, Bytes::from_static(b"!"))?;
@@ -30,7 +30,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         ]
     };
 
-    let storage = Storage::open(&dir, StorageOptions::default())?;
+    let storage = PageCacheStream::open_standard(&dir, StreamOptions::default())?;
     for (stream_id, offset, expected) in &known {
         let payload = storage.read(*stream_id, *offset).expect("record survived");
         assert_eq!(payload.as_ref(), &expected[..]);
