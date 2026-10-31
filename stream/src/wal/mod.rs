@@ -7,14 +7,14 @@ mod log_syncer;
 mod log_writer;
 mod ops;
 mod options;
-mod record;
 mod segment;
 pub mod shared;
 
+pub use crate::format::record::WalRecord;
 pub use error::WalError;
 pub use log::SegmentLog;
 pub use options::LogOptions;
-pub use shared::{SharedWal, SharedWalError, WalRecord};
+pub use shared::{SharedWal, SharedWalError};
 
 use crate::vfs::{StandardVfs, VfsI};
 use async_trait::async_trait;

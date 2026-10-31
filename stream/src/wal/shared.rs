@@ -1,7 +1,7 @@
 //! Shared group-committed WAL used by the page-cache stream store.
 
 use super::checkpoint;
-use super::record::{decode_records, encode_record};
+use crate::format::record::{HEADER_SIZE, decode_records, encode_record};
 use crate::segment::Segment;
 use crate::vfs::{Vfs, VfsI};
 use bytes::Bytes;
@@ -11,7 +11,7 @@ use std::sync::mpsc::{Receiver, Sender, TryRecvError};
 const WAL_SEGMENT_SIZE: u64 = 64 * 1024 * 1024;
 const WAL_FILE: &str = "wal.seg";
 
-pub use super::record::WalRecord;
+pub use crate::format::record::WalRecord;
 
 #[derive(Debug, thiserror::Error)]
 pub enum SharedWalError {
@@ -152,7 +152,7 @@ fn wal_writer_loop(
                 ack,
             } => {
                 sequence += 1;
-                let mut frame = Vec::with_capacity(20 + payload.len());
+                let mut frame = Vec::with_capacity(HEADER_SIZE + payload.len());
                 encode_record(&mut frame, stream_id, sequence, &payload);
                 if let Err(error) = segment.append(&frame) {
                     let _ = ack.send(Err(SharedWalError::Io(error)));
@@ -175,7 +175,7 @@ fn wal_writer_loop(
                     ack,
                 }) => {
                     sequence += 1;
-                    let mut frame = Vec::with_capacity(20 + payload.len());
+                    let mut frame = Vec::with_capacity(HEADER_SIZE + payload.len());
                     encode_record(&mut frame, stream_id, sequence, &payload);
                     if let Err(error) = segment.append(&frame) {
                         let _ = ack.send(Err(SharedWalError::Io(error)));
@@ -224,7 +224,7 @@ fn do_checkpoint(
     let mut tail = Segment::create(vfs, &tmp, WAL_SEGMENT_SIZE)?;
     for record in records {
         if record.offset >= commit_offset {
-            let mut frame = Vec::with_capacity(20 + record.payload.len());
+            let mut frame = Vec::with_capacity(HEADER_SIZE + record.payload.len());
             encode_record(&mut frame, record.stream_id, record.offset, &record.payload);
             tail.append(&frame)?;
         }

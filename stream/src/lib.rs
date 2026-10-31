@@ -3,6 +3,7 @@
 //! This crate owns mutable stream durability: write ordering, background WAL
 //! workers, local segment rotation, synchronization, and lifecycle.
 
+pub mod format;
 pub mod index;
 pub mod segment;
 pub mod streams;
